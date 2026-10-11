@@ -1,0 +1,55 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#090b19"><title>迷宫吃豆 | 口袋街机</title><link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css"></head><body>
+<header class="site-head"><div class="shell head-row"><a class="brand" href="./"><span class="brand-mark">✦</span>Pocket <b>Arcade</b></a><nav class="head-links"><a href="./">全部游戏</a><a class="active" href="maze.html">👻 迷宫吃豆</a></nav></div></header>
+<main class="shell"><div class="game-intro"><a class="back-link" href="./">← 返回小游戏大厅</a><h1>👻 迷宫吃豆</h1><p>沿迷宫收集豆子，吃下能量豆，让追赶你的怪物反过来逃跑。</p></div>
+<div class="game-layout"><section class="panel play-panel"><div class="play-toolbar"><div class="metrics"><div class="metric"><small>得分</small><strong id="score">0</strong></div><div class="metric"><small>生命</small><strong id="lives">♥ ♥ ♥</strong></div></div><div class="game-actions"><button class="btn primary" id="toggle">开始</button><button class="btn" id="restart">重开</button></div></div>
+<div class="board-wrap square"><canvas id="board" width="456" height="456" aria-label="迷宫吃豆游戏棋盘"></canvas><div class="state-overlay" id="overlay"><div class="state-card"><h2 id="overlayTitle">迷宫冒险</h2><p id="overlayMessage">吃光豆子，躲开小怪</p><button class="btn primary" id="overlayStart">开始玩 →</button></div></div></div>
+<div class="touch-bar"><button class="control" data-dir="up" aria-label="向上">↑</button><button class="control" data-dir="left" aria-label="向左">←</button><button class="control" data-dir="down" aria-label="向下">↓</button><button class="control" data-dir="right" aria-label="向右">→</button></div><div class="status-line" id="status" role="status">方向键 / WASD 操作 · 手机上滑动迷宫或点箭头</div></section>
+<aside class="panel side-panel"><h2>👻 游戏规则</h2><p>收集地图里的所有小豆子即可通关。碰到正常状态的小怪会损失一条生命。</p><div class="divider"></div><h3>🟡 能量豆</h3><p>大颗的豆子会让小怪暂时变蓝，此时你可以吃掉小怪并获得额外分数。</p><h3>🏆 最高分</h3><div class="metric"><small>BEST</small><strong id="best">0</strong></div><h3>操作方式</h3><ul><li>电脑：方向键或 W A S D 移动</li><li>手机：向想去的方向滑动，或点击箭头</li><li>空格：暂停 / 继续</li></ul><a class="inline-link" href="./">← 挑选其他小游戏</a></aside></div></main><footer class="footer">Pocket Arcade · 迷宫吃豆</footer>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id),canvas=$('board'),ctx=canvas.getContext('2d'),N=19,S=24;
+const mapText=[
+'###################',
+'#P......#........o#',
+'#.###.#.#.#.###.#.#',
+'#...#.#...#.#...#.#',
+'###.#.#####.#.###.#',
+'#...#...#...#.....#',
+'#.#####.#.#####.#.#',
+'#.......G.......#.#',
+'#.###.#####.###.#.#',
+'#o..#...#...#...o.#',
+'#.#.###.#.###.#.#.#',
+'#.#.....G.....#.#.#',
+'#.#####.#.#####.#.#',
+'#.....#...#...#...#',
+'#.###.#.###.#.###.#',
+'#...#.........#...#',
+'#.#.###.#.###.#.#.#',
+'#o......G........o#',
+'###################'];
+const dirs=[{x:1,y:0},{x:0,y:1},{x:-1,y:0},{x:0,y:-1}];let map,player,ghosts,direction,desired,pellets,lives,score,state='ready',best=0,ticks=0,lastTime=0,accum=0,powerUntil=0,invulnerableUntil=0;
+try{best=Number(localStorage.getItem('pa-maze-best'))||0}catch(_){}$('best').textContent=best;
+function reset(){ghosts=[];map=mapText.map((row,y)=>row.split('').map((v,x)=>{if(v==='P'){player={x,y};return ' '}if(v==='G'){ghosts.push({x,y,home:{x,y},direction:{x:0,y:0},color:['#ff98bf','#8ceaff','#ffb37b'][ghosts.length]});return ' '}return v}));direction={x:0,y:0};desired={x:0,y:0};pellets=map.flat().filter(v=>v==='.'||v==='o').length;score=0;lives=3;ticks=0;state='ready';powerUntil=0;invulnerableUntil=0;sync();$('toggle').textContent='开始';show('迷宫冒险','吃光所有豆子，躲开小怪');draw(0)}
+function sync(){$('score').textContent=score;$('lives').textContent='♥ '.repeat(lives).trim();if(score>best){best=score;$('best').textContent=best;try{localStorage.setItem('pa-maze-best',best)}catch(_){}}}
+function show(title,msg){$('overlayTitle').textContent=title;$('overlayMessage').textContent=msg;$('overlay').hidden=false}
+function start(){if(state==='over')reset();state='running';lastTime=performance.now();accum=0;$('overlay').hidden=true;$('toggle').textContent='暂停';$('status').textContent='抓紧收集豆子！大豆子可以让小怪暂时变蓝。'}
+function pause(){if(state==='running'){state='paused';$('toggle').textContent='继续';show('暂停中','休息一下再继续')}}
+function toggle(){state==='running'?pause():start()}
+function can(x,y){return x>=0&&x<N&&y>=0&&y<N&&map[y][x]!=='#'}
+function choose(dx,dy){desired={x:dx,y:dy};if(state==='ready')start()}
+function getDistanceMap(tx,ty){const dist=Array.from({length:N},()=>Array(N).fill(9999));dist[ty][tx]=0;const queue=[[tx,ty]];for(let h=0;h<queue.length;h++){const [x,y]=queue[h];for(const d of dirs){const nx=x+d.x,ny=y+d.y;if(can(nx,ny)&&dist[ny][nx]>dist[y][x]+1){dist[ny][nx]=dist[y][x]+1;queue.push([nx,ny])}}}return dist}
+function hit(now){if(now<invulnerableUntil)return;const frightened=now<powerUntil;for(const g of ghosts){if(g.x!==player.x||g.y!==player.y)continue;if(frightened){score+=200;g.x=g.home.x;g.y=g.home.y;g.direction={x:0,y:0};sync();$('status').textContent='吃掉小怪，奖励 200 分！'}else{lives--;sync();if(lives<=0){state='over';$('toggle').textContent='再玩一次';show('游戏结束','最终得分：'+score);$('status').textContent='游戏结束，欢迎再次挑战！'}else{player={x:1,y:1};direction={x:0,y:0};desired={x:0,y:0};ghosts.forEach(g=>{g.x=g.home.x;g.y=g.home.y;g.direction={x:0,y:0}});invulnerableUntil=now+1800;$('status').textContent='被小怪碰到了！现在还有 '+lives+' 条生命。'}return}}}
+function gameStep(now){if(state!=='running')return;ticks++;
+if(can(player.x+desired.x,player.y+desired.y)&&(desired.x||desired.y))direction=desired;
+if(can(player.x+direction.x,player.y+direction.y)){player.x+=direction.x;player.y+=direction.y}
+const tile=map[player.y][player.x];if(tile==='.'||tile==='o'){map[player.y][player.x]=' ';pellets--;score+=tile==='o'?50:10;if(tile==='o'){powerUntil=now+7500;$('status').textContent='能量模式！快去抓蓝色小怪！'}sync();if(pellets===0){state='over';$('toggle').textContent='再玩一次';show('挑战成功！','你吃光了所有豆子，得分：'+score);return}}
+hit(now);if(state!=='running')return;
+if(ticks%2===0){const dist=getDistanceMap(player.x,player.y);const frightened=now<powerUntil;for(const g of ghosts){let opts=dirs.filter(d=>can(g.x+d.x,g.y+d.y));if(opts.length>1)opts=opts.filter(d=>d.x!==-g.direction.x||d.y!==-g.direction.y);if(!opts.length)continue;opts.sort((a,b)=>{const da=dist[g.y+a.y][g.x+a.x],db=dist[g.y+b.y][g.x+b.x];return frightened?db-da:da-db});const pick=Math.random()<.72?opts[0]:opts[Math.floor(Math.random()*opts.length)];g.x+=pick.x;g.y+=pick.y;g.direction=pick}hit(now)}}
+function draw(now){ctx.fillStyle='#0b112c';ctx.fillRect(0,0,456,456);for(let y=0;y<N;y++)for(let x=0;x<N;x++){const v=map[y][x];const px=x*S,py=y*S;if(v==='#'){ctx.fillStyle='#4b4ac1';ctx.beginPath();ctx.roundRect(px+1,py+1,S-2,S-2,5);ctx.fill();ctx.fillStyle='#222e76';ctx.beginPath();ctx.roundRect(px+4,py+4,S-8,S-8,3);ctx.fill()}else if(v==='.'||v==='o'){ctx.fillStyle=v==='.'?'#ffe0a4':'#ffbd75';ctx.beginPath();ctx.arc(px+S/2,py+S/2,v==='.'?2.7:7+(Math.sin(now/210)*1.2),0,Math.PI*2);ctx.fill()}}
+for(const g of ghosts){const x=(g.x+.5)*S,y=(g.y+.55)*S;ctx.fillStyle=now<powerUntil?'#7b8ff1':g.color;ctx.beginPath();ctx.arc(x,y-3,9,Math.PI,0);ctx.lineTo(x+9,y+8);ctx.lineTo(x+4,y+4);ctx.lineTo(x,y+8);ctx.lineTo(x-4,y+4);ctx.lineTo(x-9,y+8);ctx.closePath();ctx.fill();for(const ex of [-4,4]){ctx.fillStyle='white';ctx.beginPath();ctx.arc(x+ex,y-3,3.2,0,Math.PI*2);ctx.fill();ctx.fillStyle='#24285a';ctx.beginPath();ctx.arc(x+ex+.7,y-2.5,1.4,0,Math.PI*2);ctx.fill()}}
+if(now>=invulnerableUntil||Math.floor(now/150)%2===0){const px=(player.x+.5)*S,py=(player.y+.5)*S;const angle=Math.atan2(direction.y,direction.x);const open=(direction.x||direction.y)? .23 : 0;ctx.fillStyle='#ffe185';ctx.beginPath();ctx.moveTo(px,py);ctx.arc(px,py,9.6,angle+open,angle+Math.PI*2-open);ctx.closePath();ctx.fill()}}
+function frame(now){if(state==='running'){accum+=Math.min(now-lastTime,200);if(accum>=132){accum=0;gameStep(now)}}lastTime=now;draw(now);requestAnimationFrame(frame)}
+const keyMap={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]};window.addEventListener('keydown',e=>{const move=keyMap[e.key]||keyMap[e.key.toLowerCase?.()];if(move){e.preventDefault();choose(...move)}else if(e.code==='Space'){e.preventDefault();toggle()}});for(const b of document.querySelectorAll('[data-dir]'))b.addEventListener('click',()=>{const d={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]}[b.dataset.dir];choose(...d)});let origin=null;canvas.addEventListener('pointerdown',e=>{origin={x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId)});canvas.addEventListener('pointerup',e=>{if(!origin)return;const dx=e.clientX-origin.x,dy=e.clientY-origin.y;origin=null;if(Math.max(Math.abs(dx),Math.abs(dy))<18)return;Math.abs(dx)>Math.abs(dy)?choose(Math.sign(dx),0):choose(0,Math.sign(dy))});$('toggle').addEventListener('click',toggle);$('overlayStart').addEventListener('click',start);$('restart').addEventListener('click',()=>{reset();start()});document.addEventListener('visibilitychange',()=>{if(document.hidden)pause()});reset();requestAnimationFrame(frame)
+})();
+</script></body></html>
